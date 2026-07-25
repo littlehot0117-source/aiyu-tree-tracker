@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="愛玉樹種經緯度與生長健康狀況長期記錄系統 - 支援地圖標記、GPS定位與備份匯出匯入">
+    
+    <!-- Mobile App Capable (iOS & Android) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="愛玉樹蹤">
+    <meta name="theme-color" content="#1b4332">
+    
+    <title>愛玉樹蹤 - 經緯度長期紀錄系統</title>
+    
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Main Container -->
+    <div style="max-width: 1400px; margin: 0 auto;">
+        
+        <!-- Header -->
+        <header class="glass-card">
+            <div class="header-title-section">
+                <i class="fa-solid fa-tree"></i>
+                <div>
+                    <h1>愛玉樹蹤</h1>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary);">愛玉樹經緯度與生長狀態長期紀錄系統</p>
+                </div>
+            </div>
+            
+            <div class="header-controls">
+                <!-- Theme Toggle -->
+                <button id="themeToggleBtn" class="btn btn-secondary btn-icon" title="切換深淺模式">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+                
+                <!-- Cloud Sync -->
+                <button id="cloudSyncBtn" class="btn btn-accent" title="多裝置雲端同步" onclick="openCloudSyncModal()" style="display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-cloud"></i>
+                    <span>雲端同步</span>
+                    <span id="connStatusBadge" style="width: 8px; height: 8px; border-radius: 50%; background: #ef4444; display: inline-block;" title="連線狀態"></span>
+                </button>
+                
+                <!-- Export Backup (JSON) -->
+                <button id="exportJsonBtn" class="btn btn-secondary" title="匯出完整 JSON 備份檔">
+                    <i class="fa-solid fa-file-export"></i>
+                    <span>完整備份 (JSON)</span>
+                </button>
+                
+                <!-- Export CSV -->
+                <button id="exportCsvBtn" class="btn btn-secondary" title="匯出 Excel/CSV 報表">
+                    <i class="fa-solid fa-file-csv"></i>
+                    <span>匯出 CSV</span>
+                </button>
+                
+                <!-- Import File -->
+                <div class="file-input-wrapper">
+                    <button class="btn btn-primary" title="匯入備份檔 (JSON 或 CSV)">
+                        <i class="fa-solid fa-file-import"></i>
+                        <span>匯入備份</span>
+                    </button>
+                    <input type="file" id="importFileBtn" accept=".json,.csv">
+                </div>
+            </div>
+        </header>
+
+        <!-- Stats Dashboard -->
+        <div class="stats-grid">
+            <div class="glass-card stat-card">
+                <div class="stat-icon">
+                    <i class="fa-solid fa-seedling"></i>
+                </div>
+                <div class="stat-info">
+                    <span id="statTotalTrees" class="stat-value">0</span>
+                    <span class="stat-label">記錄樹木總數</span>
+                </div>
+            </div>
+            
+            <div class="glass-card stat-card">
+                <div class="stat-icon">
+                    <i class="fa-solid fa-heart-pulse"></i>
+                </div>
+                <div class="stat-info">
+                    <span id="statHealthyRate" class="stat-value">0%</span>
+                    <span class="stat-label">健康良好比例 (優/佳)</span>
+                </div>
+            </div>
+            
+            <div class="glass-card stat-card">
+                <div class="stat-icon">
+                    <i class="fa-solid fa-mountain"></i>
+                </div>
+                <div class="stat-info">
+                    <span id="statAvgAltitude" class="stat-value">0m</span>
+                    <span class="stat-label">平均海拔高度</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="dashboard-main">
+            
+            <!-- Sidebar Panel: Form -->
+            <div class="sidebar-panel">
+                <section class="glass-card form-card">
+                    <h2 id="formTitle">
+                        <span><i class="fa-solid fa-circle-plus"></i> 新增樹木記錄</span>
+                        <button id="cancelEditBtn" class="btn btn-secondary" style="display: none; padding: 4px 10px; font-size: 0.8rem;">取消編輯</button>
+                    </h2>
+                    
+                    <form id="aiyuForm" onsubmit="return false;">
+                        <!-- Hidden field for ID if editing -->
+                        <input type="hidden" id="treeId">
+                        
+                        <div class="form-group">
+                            <label for="treeName">樹木名稱 / 編號 *</label>
+                            <input type="text" id="treeName" class="form-control" placeholder="例如: AY-001 或 陡坡大愛玉" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>地理經緯度 *</label>
+                            <div class="coordinate-group">
+                                <div>
+                                    <input type="number" step="any" id="latitude" class="form-control" placeholder="緯度 (Lat)" required min="-90" max="90">
+                                </div>
+                                <div>
+                                    <input type="number" step="any" id="longitude" class="form-control" placeholder="經度 (Lng)" required min="-180" max="180">
+                                </div>
+                            </div>
+                            <button type="button" id="getLocationBtn" class="btn btn-secondary" style="width: 100%; margin-top: 8px; font-size: 0.85rem;">
+                                <i class="fa-solid fa-location-crosshairs"></i> 取得當前位置 (GPS)
+                            </button>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="altitude">海拔高度 (米)</label>
+                            <input type="number" id="altitude" class="form-control" placeholder="例如: 850" min="0">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="recordDate">觀測/種植日期 *</label>
+                            <input type="date" id="recordDate" class="form-control" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>植株性別 *</label>
+                            <div class="gender-selector">
+                                <label class="gender-option">
+                                    <input type="radio" name="treeGender" value="male">
+                                    <span><i class="fa-solid fa-mars"></i> 公株</span>
+                                </label>
+                                <label class="gender-option">
+                                    <input type="radio" name="treeGender" value="female" checked>
+                                    <span><i class="fa-solid fa-venus"></i> 母株</span>
+                                </label>
+                                <label class="gender-option">
+                                    <input type="radio" name="treeGender" value="unknown">
+                                    <span><i class="fa-solid fa-circle-question"></i> 未知</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>來源分類 *</label>
+                            <div class="origin-selector">
+                                <label class="origin-option">
+                                    <input type="radio" name="treeOrigin" value="wild" checked>
+                                    <span>野外</span>
+                                </label>
+                                <label class="origin-option">
+                                    <input type="radio" name="treeOrigin" value="wild_transplant">
+                                    <span>野外移植</span>
+                                </label>
+                                <label class="origin-option">
+                                    <input type="radio" name="treeOrigin" value="cultivated_transplant">
+                                    <span>栽植移植</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>品種 *</label>
+                            <div class="variety-selector">
+                                <label class="variety-option">
+                                    <input type="radio" name="treeVariety" value="hongjiu" checked>
+                                    <span>紅九</span>
+                                </label>
+                                <label class="variety-option">
+                                    <input type="radio" name="treeVariety" value="miao1">
+                                    <span>苗1</span>
+                                </label>
+                                <label class="variety-option">
+                                    <input type="radio" name="treeVariety" value="miao2">
+                                    <span>苗2</span>
+                                </label>
+                                <label class="variety-option">
+                                    <input type="radio" name="treeVariety" value="wildlife">
+                                    <span>野生</span>
+                                </label>
+                            </div>
+                            <input type="text" id="varietyWildLocation" class="form-control" placeholder="請輸入野生地點..." style="display: none; margin-top: 8px;">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="healthStatus">生長健康狀況 *</label>
+                            <select id="healthStatus" class="form-control" required>
+                                <option value="excellent">優良 (生長強健，著果豐沛)</option>
+                                <option value="good" selected>良好 (葉色正常，無病蟲害)</option>
+                                <option value="fair">普通 (生長平平，微病蟲害)</option>
+                                <option value="poor">欠佳 (落葉落果，有枯萎現象)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>實地照片</label>
+                            <div class="image-upload-wrapper">
+                                <input type="file" id="treePhoto" accept="image/*">
+                                <div class="upload-placeholder" id="uploadPlaceholder">
+                                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                                    <span>上傳照片 (點擊或拖曳至此)</span>
+                                </div>
+                                <div class="preview-container" id="previewContainer">
+                                    <img id="imagePreview" src="" alt="預覽圖">
+                                    <button type="button" class="remove-img-btn" id="removeImgBtn" title="移除照片">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="notes">備註 / 記錄說明</label>
+                            <textarea id="notes" class="form-control" rows="3" placeholder="品種、修剪狀況、周圍環境描述等..."></textarea>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" id="submitBtn" class="btn btn-primary">
+                                <i class="fa-solid fa-floppy-disk"></i>
+                                <span>儲存記錄</span>
+                            </button>
+                            <button type="reset" id="resetBtn" class="btn btn-secondary">
+                                <i class="fa-solid fa-arrows-rotate"></i>
+                                <span>重填</span>
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+            
+            <!-- Main Content: Map & Table List -->
+            <div class="main-content-panel">
+                <!-- Map Card -->
+                <section class="glass-card map-card">
+                    <div class="map-card-header">
+                        <h2><i class="fa-solid fa-map-location-dot"></i> 愛玉分布地圖</h2>
+                        <span class="map-hint"><i class="fa-solid fa-circle-info"></i> 可在畫面上點擊地圖直接標記新經緯度</span>
+                    </div>
+                    <div id="map"></div>
+                </section>
+                
+                <!-- Table List Card -->
+                <section class="glass-card table-card">
+                    <h2><i class="fa-solid fa-list-check"></i> 愛玉樹種記錄列表</h2>
+                    
+                    <!-- Search & Filter Controls -->
+                    <div class="filter-row">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="searchQuery" class="form-control" placeholder="搜尋名稱、編號或備註...">
+                        </div>
+                        
+                        <div>
+                            <select id="filterHealth" class="form-control">
+                                <option value="all">所有健康狀態</option>
+                                <option value="excellent">健康狀況：優良</option>
+                                <option value="good">健康狀況：良好</option>
+                                <option value="fair">健康狀況：普通</option>
+                                <option value="poor">健康狀況：欠佳</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <select id="sortBy" class="form-control">
+                                <option value="date-desc">日期由新到舊</option>
+                                <option value="date-asc">日期由舊到新</option>
+                                <option value="altitude-desc">海拔由高到低</option>
+                                <option value="altitude-asc">海拔由低到高</option>
+                                <option value="name-asc">名稱 (A - Z)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Table Grid -->
+                    <div class="records-container">
+                        <table class="records-table" id="recordsTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 70px;">照片</th>
+                                    <th>樹木資訊</th>
+                                    <th>座標 (緯度, 經度)</th>
+                                    <th>海拔</th>
+                                    <th>觀測日期</th>
+                                    <th>健康狀況</th>
+                                    <th style="width: 130px; text-align: center;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recordsTableBody">
+                                <!-- Dynamically populated -->
+                            </tbody>
+                        </table>
+                        
+                        <!-- Empty State -->
+                        <div id="emptyState" class="empty-state" style="display: none;">
+                            <i class="fa-solid fa-folder-open"></i>
+                            <p>尚無任何記錄。請在左側輸入表單，或直接在地圖上點擊以新增第一顆愛玉樹！</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+            
+        </div>
+        
+        <!-- Footer -->
+        <footer>
+            <p>愛玉樹蹤 (Aiyu Tree Tracker) &copy; 2026. 專為長期現地記錄與生態追蹤設計。</p>
+        </footer>
+    </div>
+    
+    <!-- Floating Toast Notification -->
+    <div id="toast" class="toast toast-info">
+        <i id="toastIcon" class="fa-solid fa-circle-info"></i>
+        <span id="toastMessage">這是通知</span>
+    </div>
+
+    <!-- Cloud Sync Modal -->
+    <div id="syncModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 25px; width: 90%; max-width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); position: relative; color: var(--text-primary);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-bottom: 20px;">
+                <h3 style="margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1.25rem; font-weight: 700; color: var(--accent);"><i class="fa-solid fa-cloud"></i> 雲端金鑰同步設定</h3>
+                <button class="close-modal-btn" onclick="closeCloudSyncModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary); transition: var(--transition);">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Config Step: Enter Google Script URL -->
+                <div id="syncStepConfig" style="display: block;">
+                    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 15px; line-height: 1.5;">
+                        此功能使用 <b>Google 試算表</b> 來儲存與同步資料。請先貼上您的 Google Apps Script 網頁應用程式網址。
+                    </p>
+                    <div class="form-group" style="margin-bottom: 15px;">
+                        <input type="text" id="inputGoogleScriptUrl" class="form-control" placeholder="貼上 https://script.google.com/macros/s/.../exec" style="font-family: monospace; font-size: 0.85rem;">
+                    </div>
+                    <button class="btn btn-primary" onclick="saveGoogleScriptUrl()" style="width: 100%; margin-bottom: 15px; font-weight: 600; padding: 10px;">
+                        確認並保存網址
+                    </button>
+                    
+                    <div style="background: var(--primary-soft); border-radius: var(--radius-sm); padding: 12px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
+                        <h4 style="margin: 0 0 5px 0; color: var(--text-primary); font-size: 0.85rem; font-weight: 700;">如何取得此網址？</h4>
+                        <ol style="margin: 0; padding-left: 15px;">
+                            <li>建立一個 Google 試算表，命名為「愛玉記錄同步」。</li>
+                            <li>點擊上方選單的「擴充功能」 -> 「Apps Script」。</li>
+                            <li>貼上系統產生的同步指令碼（詳見教學文件）。</li>
+                            <li>點擊右上角「部署」 -> 「新部署」 -> 類型選擇「網頁應用程式」。</li>
+                            <li>「誰有權限存取」必須設定為<b>「任何人 (Anyone)」</b>。</li>
+                            <li>點擊部署並授權後，複製產生的「網頁應用程式網址」貼回此處。</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <!-- Main Sync Step (Hidden by default, shown once URL is configured) -->
+                <div id="syncStepMain" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; background: var(--border-color); padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.85rem; border: 1px solid var(--border-color);">
+                        <span style="color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 250px;" id="displayGoogleScriptUrl">已設定 Google 試算表</span>
+                        <a href="#" onclick="clearGoogleScriptUrl()" style="color: #e63946; font-weight: 600; text-decoration: none;">修改網址</a>
+                    </div>
+
+                    <!-- Step 1: No key connected -->
+                    <div id="syncStepNoKey" style="display: block;">
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px; line-height: 1.5;">
+                            此功能讓您在不同手機間「即時同步」資料。您可以在此手機「建立新金鑰」來上傳，或輸入另一支手機產生的「同步金鑰」進行連線。
+                        </p>
+                        <button class="btn btn-primary" onclick="createNewSyncKey()" style="width: 100%; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; padding: 12px;">
+                            <i class="fa-solid fa-plus-circle"></i> 建立全新同步金鑰
+                        </button>
+                        
+                        <div style="text-align: center; color: var(--text-secondary); margin: 15px 0; position: relative;">
+                            <span style="background: var(--card-bg); padding: 0 10px; z-index: 1; position: relative; font-size: 0.85rem;">或</span>
+                            <hr style="position: absolute; top: 50%; left: 0; right: 0; border: none; border-top: 1px solid var(--border-color); margin: 0; z-index: 0;">
+                        </div>
+                        
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="inputSyncKey" style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px;">輸入已有同步金鑰 (由另一支手機產生)</label>
+                            <div style="display: flex; gap: 8px; margin-top: 5px;">
+                                <input type="text" id="inputSyncKey" class="form-control" placeholder="貼上您的同步金鑰..." style="flex: 1; font-family: monospace; font-size: 0.95rem;">
+                                <button class="btn btn-accent" onclick="connectExistingSyncKey()" style="min-width: 80px; font-weight: 600;">連線</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Key connected -->
+                    <div id="syncStepHasKey" style="display: none;">
+                        <div class="form-group">
+                            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px;">您的雲端同步金鑰 (請複製此金鑰輸入到其他手機)</label>
+                            <div style="display: flex; gap: 8px; margin-top: 5px;">
+                                <input type="text" id="currentSyncKey" class="form-control" readonly style="flex: 1; background: var(--primary-soft); font-family: monospace; font-size: 1rem; text-align: center; letter-spacing: 1px; font-weight: 600; color: var(--accent);">
+                                <button class="btn btn-accent" onclick="copySyncKey()" style="min-width: 80px; font-weight: 600;"><i class="fa-solid fa-copy"></i> 複製</button>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+                            <button class="btn btn-primary" onclick="uploadRecordsToCloud()" style="flex: 1; min-width: 140px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; padding: 10px;">
+                                <i class="fa-solid fa-cloud-arrow-up"></i> 手動上傳雲端
+                            </button>
+                            <button class="btn btn-secondary" onclick="downloadRecordsFromCloud()" style="flex: 1; min-width: 140px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; padding: 10px;">
+                                <i class="fa-solid fa-cloud-arrow-down"></i> 手動下載合併
+                            </button>
+                        </div>
+
+                        <div style="margin-top: 20px; padding: 15px; background: rgba(82, 183, 136, 0.1); border: 1px solid rgba(82, 183, 136, 0.2); border-radius: var(--radius-sm);">
+                            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; color: var(--text-primary); font-size: 0.95rem;">
+                                <input type="checkbox" id="autoSyncCheckbox" onchange="toggleAutoSync(this.checked)" style="width: 18px; height: 18px; accent-color: var(--accent);">
+                                <span>啟用「自動同步」功能 (推薦)</span>
+                            </label>
+                            <p style="color: var(--text-secondary); font-size: 0.8rem; margin-top: 5px; margin-left: 28px; line-height: 1.4;">
+                                啟動後，每次新增、編輯、刪除資料時會自動同步上傳；且每次打開網頁時會自動下載並合併最新的資料。
+                            </p>
+                        </div>
+
+                        <button class="btn btn-secondary" onclick="disconnectSyncKey()" style="width: 100%; margin-top: 20px; color: #e63946; border-color: rgba(230, 57, 70, 0.2); background: rgba(230, 57, 70, 0.05); display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; padding: 10px;">
+                            <i class="fa-solid fa-link-slash"></i> 斷開與此金鑰的雲端連結
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet Map JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- App JavaScript Logic -->
+    <script src="app.js?v=2.0_google_sheets"></script>
+</body>
+</html>
