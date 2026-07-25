@@ -423,6 +423,10 @@ select.form-control option {
     background: rgba(45, 106, 79, 0.15) !important;
     color: #2d6a4f !important;
 }
+.badge-variety-unknown {
+    background: rgba(108, 117, 125, 0.15) !important;
+    color: var(--text-secondary) !important;
+}
 
 /* Image Upload Container */
 .image-upload-wrapper {

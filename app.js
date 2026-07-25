@@ -705,6 +705,8 @@ function renderTable(filteredList) {
         } else if (varietyVal === 'wildlife') {
             const locText = r.wildLocation ? ` (${escapeHtml(r.wildLocation)})` : '';
             varietyBadge = `<span class="badge badge-variety-wild">野生${locText}</span>`;
+        } else if (varietyVal === 'unknown') {
+            varietyBadge = '<span class="badge badge-variety-unknown">未知</span>';
         }
 
         const altText = r.altitude !== null ? `${r.altitude} m` : '未記錄';
@@ -798,6 +800,8 @@ function updateMapMarkers(filteredList) {
         else if (varietyVal === 'wildlife') {
             const loc = r.wildLocation ? ` (${r.wildLocation})` : '';
             varietyText = `野生${loc} 🌲`;
+        } else if (varietyVal === 'unknown') {
+            varietyText = '未知 ⚪';
         }
 
         const popupContent = `
@@ -901,8 +905,9 @@ function exportToCsv() {
         else if (r.origin === 'cultivated_transplant') originCn = '栽植移植';
 
         // Translate variety to Chinese
-        let varietyCn = '紅九';
-        if (r.variety === 'miao1') varietyCn = '苗1';
+        let varietyCn = '未知';
+        if (r.variety === 'hongjiu') varietyCn = '紅九';
+        else if (r.variety === 'miao1') varietyCn = '苗1';
         else if (r.variety === 'miao2') varietyCn = '苗2';
         else if (r.variety === 'wildlife') varietyCn = '野生';
 
@@ -1208,13 +1213,14 @@ function parseAndMergeCsv(csvContent) {
             }
 
             // Translate variety back to database value (tolerant matching)
-            let variety = 'hongjiu';
+            let variety = 'unknown';
             if (varietyIdx !== -1 && row[varietyIdx]) {
                 const varietyStr = row[varietyIdx].trim();
                 if (varietyStr.includes('紅九')) variety = 'hongjiu';
                 else if (varietyStr.includes('苗1')) variety = 'miao1';
                 else if (varietyStr.includes('苗2')) variety = 'miao2';
                 else if (varietyStr.includes('野生')) variety = 'wildlife';
+                else if (varietyStr.includes('未知')) variety = 'unknown';
             }
 
             const wildLocation = wildLocationIdx !== -1 && row[wildLocationIdx] ? row[wildLocationIdx].trim() : '';
